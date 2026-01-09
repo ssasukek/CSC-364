@@ -110,7 +110,11 @@ int main(int argc, char **argv){
     }
 
     // ping iterations - measure RTT
-    int buffer[3200];
+    uint8_t buffer[3200];
+    for (int i = 0; i < sizeof(buffer); i++){
+        buffer[i] = (uint8_t)(i & 0xFF);
+    }
+
     uint64_t min_rtt = UINT64_MAX;
     uint64_t max_rtt = 0;
     uint64_t total_rtt = 0;
@@ -172,7 +176,7 @@ int main(int argc, char **argv){
     // Calculate throughput in MB/s
     double seconds = (double)total_us / 1000000;    // Seconds = Microseconds / 1,000,000
     double total_bytes = (double)bulk_bytes * 2;
-    double MBps = (total_bytes / seconds) / 1000000;    
+    double MBps = (total_bytes / seconds) / 1000000;
 
     printf("Throughput = %.2f MB/s\n", MBps);
 
