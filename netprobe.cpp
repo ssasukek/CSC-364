@@ -20,9 +20,9 @@ static uint64_t now_us(void){
         QueryPerformanceFrequency(&f);
         init = 1;
     }
-    LARGE_INTEGER t;
-    QueryPerformanceCounter(&t);
-    return (uint64_t)((t.QuadPart * 1000000ULL) / (uint64_t)f.QuadPart);
+    LARGE_INTEGER time;
+    QueryPerformanceCounter(&time);
+    return (uint64_t)((time.QuadPart * 1000000ULL) / (uint64_t)f.QuadPart);
 }
 
 // Connect to TCP
@@ -110,24 +110,76 @@ int main(int argc, char **argv){
     }
 
     // ping iterations - measure RTT
+    int buffer[3200];
+    uint64_t min_rtt = UINT64_MAX;
+    uint64_t max_rtt = 0;
+    uint64_t total_rtt = 0;
+
+    for (int i = 0; i < pings; i++){
+        uint64_t start = now_us();
+
+        // send ping_bytes
+        if (send_all(socket, (const char *)buffer, ping_bytes) <= 0){
+            printf("send failed: %d\n", WSAGetLastError());
+            closesocket(socket);
+            WSACleanup();
+            return 1;
+        }
+
+        // receive ping_bytes
+        if (recv_all(socket, (char *)buffer, ping_bytes) <= 0){
+            printf("recv failed: %d\n", WSAGetLastError());
+            closesocket(socket);
+            WSACleanup();
+            return 1;
+        }
+
+        uint64_t rtt_us = now_us() - start;
+
+        if (rtt_us < min_rtt) min_rtt = rtt_us;
+        if (rtt_us > max_rtt) max_rtt = rtt_us;
+        total_rtt += rtt_us;
+    }
+    double avg_rtt = (double)total_rtt / (double)pings;
+    printf("Round Trip Time (RTT): min = %llu us, avg = %.2f us, max = %llu us\n", min_rtt, avg_rtt, max_rtt);
+
+    // Bulk transfer - measure throughput
+    uint64_t start = now_us();
+
+    //sender (Writes a chunk of data (e.g., a byte[] or Buffer) to the socket.)
+    int chunk_bytes = (int)sizeof(buffer);
+    int bulk_remaining = bulk_bytes;
+    while (bulk_remaining > 0){
+        int to_send = (bulk_remaining < chunk_bytes) ? bulk_remaining : chunk_bytes;
+        if (send_all(socket, (const char *)buffer, to_send) <= 0){
+            closesocket(socket);
+            WSACleanup();
+            return 1;
+        }
+
+    //receiver (Reads data from the socket)
+        int to_recv = (bulk_remaining < chunk_bytes) ? bulk_remaining : chunk_bytes;
+        if (recv_all(socket, (char *)buffer, to_recv) <= 0){
+            closesocket(socket);
+            WSACleanup();
+            return 1;
+        }
+        bulk_remaining -= to_recv;
+    }
+
+    uint64_t total_us = now_us() - start;
+
+    // Calculate throughput in MB/s
+    double seconds = (double)total_us / 1000000;    // Seconds = Microseconds / 1,000,000
+    double total_bytes = (double)bulk_bytes * 2;
+    double MBps = (total_bytes / seconds) / 1000000;    
+
+    printf("Throughput = %.2f MB/s\n", MBps);
 
 
-
-
-    
-    // printf("Echo server Listening on port %d\n", port);
-
-
-
-    // printf("Round Trip Time (RTT) = min = %.2f ms, avg = %.2f ms, max = %.2f ms\n", min_rtt, avg_rtt, max_rtt);
-    // printf("Throughput = %.2f Mbps\n", mbps);
-
-    // cleanup - WSAcleanup();
-    // closesocket(ls);
-    // WSACleanup();
-    // return 0;
+    closesocket(socket);
+    WSACleanup();
+    return 0;
 }
-
-// WSAGetLastError()
 
 
