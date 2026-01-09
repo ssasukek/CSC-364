@@ -109,7 +109,7 @@ int main(int argc, char **argv){
         return 1;
     }
 
-    // ping iterations - measure RTT
+    
     uint8_t buffer[3200];
     for (int i = 0; i < sizeof(buffer); i++){
         buffer[i] = (uint8_t)(i & 0xFF);
@@ -118,7 +118,8 @@ int main(int argc, char **argv){
     uint64_t min_rtt = UINT64_MAX;
     uint64_t max_rtt = 0;
     uint64_t total_rtt = 0;
-
+    
+    // ping iterations - measure RTT
     for (int i = 0; i < pings; i++){
         uint64_t start = now_us();
 
