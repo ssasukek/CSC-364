@@ -11,6 +11,7 @@
 #include <fstream>
 #include <thread>
 #include <iostream>
+#include <time.h>
 
 // measuring time in micro seconds
 static uint64_t now_us(void){
@@ -111,8 +112,9 @@ int main(int argc, char **argv){
 
     
     uint8_t buffer[3200];
+    srand((unsigned)time(NULL));
     for (int i = 0; i < sizeof(buffer); i++){
-        buffer[i] = (uint8_t)(i & 0xFF);
+        buffer[i] = (uint8_t)rand();
     }
 
     uint64_t min_rtt = UINT64_MAX;
