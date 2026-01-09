@@ -15,7 +15,7 @@
 
 
 // measuring time in micro seconds
-static uint16_t now_us(void){
+static uint64_t now_us(void){
     static LARGE_INTEGER f;
     static int init = 0;
     if (!init){
@@ -45,20 +45,50 @@ static SOCKET connect_tcp(const char *hostname, const char *port){
             continue;
         }
         if (connect(s, p->ai_addr, (int)p->ai_addrlen) == 0){
-            closesocket(s);
-            continue;
+            freeaddrinfo(res);
+            return s;
         }
-        freeaddrinfo(res);
-        return s;
+        closesocket(s);
     }
     freeaddrinfo(res);
     return INVALID_SOCKET;
 }
 
+// Send all data in buffer
+static int send_all(SOCKET s, const char *buf, int len){
+    int total_sent = 0;
+    while (total_sent < len){
+        int n = send(s, buf + total_sent, len - total_sent, 0);
+        if (n <= 0){
+            return n;
+        }
+        total_sent += n;
+    }
+    return 1;
+}
+
+// Receive all data in buffer
+static int recv_all(SOCKET s, char *buf, int len){
+    int total_recv = 0;
+    while (total_recv < len){
+        int n = recv(s, buf + total_recv, len - total_recv, 0);
+        if (n <= 0){
+            return n;
+        }
+        total_recv += n;
+    }
+    return 1;
+}
 
 
 int main(int argc, char **argv){
-    int port = atoi(argv[1]);
+
+    if (argc < 3){
+        printf("Usage: %s <hostname> <port> <pings>", argv[0]);
+        return 1;
+    }
+
+    int port = atoi(argv[2]);
     WSADATA w;
     WSAStartup(MAKEWORD(2,2), &w);
     SOCKET ls = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -85,15 +115,19 @@ int main(int argc, char **argv){
         }
         closesocket(c);
     }
+
+
+
+
+    printf("Round Trip Time (RTT) = min = %.2f ms, avg = %.2f ms, max = %.2f ms\n", min_rtt, avg_rtt, max_rtt);
+    printf("Throughput = %.2f Mbps\n", mbps);
+
+    // cleanup - WSAcleanup();
+    closesocket(ls);
+    WSACleanup();
+    return 0;
 }
-
-
-
-
-// WSACleanup()
 
 // WSAGetLastError()
 
-// send_all()
-// recv_all()
 
