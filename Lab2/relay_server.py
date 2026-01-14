@@ -1,4 +1,5 @@
 ### TCP Relay Server - that allow two clients to communicate through it ###
+# Bind > Listen > Accept
 
 import socket
 import threading
@@ -13,7 +14,7 @@ def send_all(sock, data: bytes):
     while total_sent < length:
         sent = sock.send(data[total_sent:])
         if sent <= 0:
-            raise RuntimeError("Socket connection broken")
+            raise RuntimeError("Socket Failed")
         total_sent += sent
 
 
