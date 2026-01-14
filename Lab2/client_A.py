@@ -2,11 +2,12 @@
 # Ping sender
 
 import socket
+import struct
 
 PORT = 5000
 IP = '0.0.0.0'
 
-def send_all(sock, data: bytes):
+def send_all(sock: socket.socket, data: bytes):
     total_sent = 0
     length = len(data)
 
@@ -16,23 +17,24 @@ def send_all(sock, data: bytes):
             raise RuntimeError("Socket Failed")
         total_sent += sent
 
-def recv_all(sock, length: int):
+def recv_all(sock: socket.socket, length: int):
     pass
 
-def send_framing():
-    pass
+def send_framing(sock: socket.socket, data: bytes):
+    header = struct.pack('!I', len(data)) # 4-byte length header
+    send_all(sock, header + data)
 
-def recv_framing():
-    pass
+def recv_framing(sock: socket.socket):
+    header = recv_all(sock, 4)
+    return recv_all(sock, length)
 
-def did_recv():
+# check if we received READY message
+def did_recv(sock: socket.socket):
     pass
 
 
 def main():
     serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    serversocket.bind((IP, PORT))
-    serversocket.listen(5)
 
 
     print("Client A recieved 'READY' from server")
