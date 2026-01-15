@@ -60,8 +60,8 @@ def main():
 
     for i in range(5):
         msg = f"PING {i + 1}".encode()
-        print(f"Client A sending PING {msg.decode()}")
-        send_framing(serversocket, msg)
+        print(f"Client A sending {msg.decode()}")
+        send_framing(serversocket, f"PONG {i + 1}".encode())
 
         reply = recv_framing(serversocket)
         print(f"Client A recieved: {reply.decode()}")
