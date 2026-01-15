@@ -5,7 +5,7 @@ import socket
 import struct
 
 PORT = 5000
-IP = '0.0.0.0'
+IP = '127.0.0.1'
 
 def send_all(sock: socket.socket, data: bytes):
     total_sent = 0
