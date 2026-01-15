@@ -1,19 +1,15 @@
-
-#include <iostream>
-#include <fstream>
-#define STB_IMAGE_IMPLEMENTATION
-#include <thread>
-#include <atomic>
-#include <chrono>
-#include <string>
-using namespace std;
-
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
-#include <stdio.h>
-#include <stop_token>
+
+#include <cstdint>
+#include <cstring>
+#include <cstdlib>
+#include <thread>
+#include <string>
+using namespace std;
+
 #pragma comment(lib, "Ws2_32.lib")
 
 // Send all data in buffer
@@ -43,7 +39,7 @@ static int recv_all(SOCKET s, char *buf, int len){
 }
 
 // sending 4 byte legnth framing
-static bool send_framing(SOCKET s, char *buf, int len){
+static bool send_framing(SOCKET s, const char *buf, int len){
     uint32_t net_len = htonl(len);
     if (send_all(s, (char *)&net_len, sizeof(net_len)) <= 0){   // 4 bytes
         return false;
@@ -96,7 +92,8 @@ static DWORD WINAPI tcp_relay(LPVOID p){
     }
 
     // unblock other direction
-    shutdown(args->dest_s, SD_SEND);
+    shutdown(args->dest_s, SD_BOTH);
+    shutdown(args->source_s, SD_BOTH);
     return 0;
 
 }
