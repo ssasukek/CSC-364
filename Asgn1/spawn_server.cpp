@@ -14,9 +14,6 @@ using namespace std;
 
 #pragma comment(lib, "Ws2_32.lib")
 
-static const char *IP = "127.0.0.1";
-static const int PORT = 5000;
-
 #pragma pack(push, 1)
 struct BMPFileHeader
 {
@@ -41,6 +38,30 @@ struct BMPInfoHeader
     unsigned int biClrImportant; // important colors (0)
 };
 #pragma pack(pop)
+
+// read BMP image
+static bool readImage(const char *filename, char **pixels, int32_t *width, int32_t *height, int32_t *size)
+{
+    FILE *imageFile = fopen(filename, "rb");
+    BMPFileHeader fh;
+    BMPInfoHeader fih;
+    fread(&fh.bfType, sizeof(BMPFileHeader), 1, imageFile);
+    fread(&fh.bfSize, sizeof(BMPInfoHeader), 1, imageFile);
+    
+}
+
+// write BMP image
+static bool writeImage(const char *filename, const char *data, int size)
+{
+    FILE *file = fopen(filename, "wb");
+    if (!file)
+    {
+        return false;
+    }
+    fwrite(data, 1, size, file);
+    fclose(file);
+    return true;
+}
 
 // Send all data in buffer
 static int send_all(SOCKET s, const char *buf, int len){
@@ -78,45 +99,7 @@ static bool send_data(SOCKET s, int32_t &in_msg){
     return true;
 }
 
-// read BMP image
-static bool readImage(const char *filename, char **pixels, int32_t *width, int32_t *height, int32_t *size)
-{
-    FILE *imageFile = fopen(filename, "rb");
-    if (!imageFile){
-        return false;
-    }
-    int32_t dataSize = 0;
-    fseek(imageFile, 0, SEEK_END);
-}
 
-// write BMP image
-static bool writeImage(const char *filename, const char *data, int size)
-{
-    FILE *file = fopen(filename, "wb");
-    if (!file){
-        return false;
-    }
-    fwrite(data, 1, size, file);
-    fclose(file);
-    return true;
-}
-
-
-
-int main(int argc, char **argv)
-{
-    if (argc != 3){
-        printf("Usage: spawn_server <port> <output_file>");
-        return 1;
-    }
-
-    BMPFileHeader *fileHeader = (BMPFileHeader *)bmp.data();
-    BMPInfoHeader *infoHeader = (BMPInfoHeader *)(bmp.data() + sizeof(BMPFileHeader));
-
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0){
-        printf("WSAStartup failed\n");
-        return 1;
-    }
+int main(int argc, char **argv){
 
 }

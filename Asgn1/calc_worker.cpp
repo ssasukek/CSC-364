@@ -102,9 +102,6 @@ static SOCKET connect_tcp(const char *server_ip, const char *port){
     return INVALID_SOCKET;
 }
 
-static const char *IP = "127.0.0.1";
-static const int PORT = 5000;
-
 int main(int argc, char **argv){
     if (argc != 4){
         printf("Usage: calc_worker <server_ip> <server_port> <contrast_value>\n");
