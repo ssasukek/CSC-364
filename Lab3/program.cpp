@@ -351,11 +351,9 @@ static void threadfct(ThreadData *td)
         {
             S += g_partial_sums[i];
         }
-        double N = (double)img.width * (double)img.height;
+        double N = img.width * img.height;
         double Lavg = exp(S / N) - 1.0;
 
-        if (Lavg < 1e-6)
-            Lavg = 1e-6; // prevent division by zero
         g_Lavg = Lavg;
         printf("Computed Lavg: %f\n", g_Lavg);
     }
@@ -394,6 +392,7 @@ static void threadfct(ThreadData *td)
         img.rgb[off + 0] = r_new;
         img.rgb[off + 1] = g_new;
         img.rgb[off + 2] = b_new;
+
     }
 
     gather(td->use_sense, &td->local_sense);
