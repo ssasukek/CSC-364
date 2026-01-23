@@ -1,6 +1,7 @@
 // due jan 23, 2024
 // 4 threqads + two stage tone mapping + barrier + gather fucntion
 // /program <input.bmp> <output.bmp>
+
 #define WIN32_LEAN_AND_MEAN
 #include <stdio.h>
 #include <stdint.h>
@@ -8,7 +9,6 @@
 #include <string.h>
 #include <vector>
 #include <iostream>
-#pragma comment(lib, "Ws2_32.lib")
 
 #pragma pack(push, 1)
 struct BMPFileHeader
@@ -35,43 +35,67 @@ struct BMPInfoHeader
 };
 #pragma pack(pop)
 
-struct Image24
+struct BMPImage24
 {
     int width = 0;
     int height = 0;
-    int row_padded = (width * 3 + 3) & (~3);
-    std::vector<uint8_t> data; // RGB data
+    int pre_height = 0;
+    std::vector<uint8_t> rgb; // RGB data
 };
 
-struct Image24 load_bmp(const char *filename)
+static int row_padded(int width)
+{
+    // each row padding of 4 bytes
+    return (width * 3 + 3) & (~3);
+}
+
+static BMPImage24 load_bmp(const char *filename)
 {
     FILE *file = fopen(filename, "rb");
 
     BMPFileHeader fh;
     BMPInfoHeader ih;
 
-    fread(&fh, sizeof(BMPFileHeader), 1, file);
-    fread(&ih, sizeof(BMPInfoHeader), 1, file);
-
-    fread(&fh.bfType, sizeof(short), 1, file);
-    fread(&fh.bfSize, sizeof(int), 1, file);
-    fread(&fh.bfReserved1, sizeof(short), 1, file);
-    fread(&fh.bfReserved2, sizeof(short), 1, file);
-    fread(&fh.bfOffBits, sizeof(int), 1, file);
-
+    fread(&fh, sizeof(fh), 1, file);
+    fread(&ih, sizeof(ih), 1, file);
 
     unsigned char *data = (unsigned char *)malloc(ih.biSizeImage);
+    fseek(file, fh.bfOffBits, SEEK_SET);
     fread(data, ih.biSizeImage, 1, file);
 
-    struct Image24 img;
+    struct BMPImage24 img;
     img.width = ih.biWidth;
-    img.height = ih.biHeight;
-    img.data.assign(data, data + ih.biSizeImage);
+    img.height = (ih.biHeight > 0) ? ih.biHeight : -ih.biHeight; // handle top-down BMP
+    img.pre_height = ih.biHeight;
+    img.rgb.resize(row_padded(img.width) * img.height);
+    std::vector<uint8_t> row((size_t)row_padded(img.width));
+
+    if (fseek(file, fh.bfOffBits, SEEK_SET) != 0)
+    {
+        printf("Error seeking to pixel data");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < img.height; i++)
+    {
+        memcpy(row.data(), &data[i * row_padded(img.width)], row_padded(img.width));
+        unsigned char *src_row = row.data();
+        for (int j = 0; j < img.width; j++)
+        {
+            unsigned char b = src_row[j * 3 + 0];
+            unsigned char g = src_row[j * 3 + 1];
+            unsigned char r = src_row[j * 3 + 2];
+            img.rgb[i * row_padded(img.width) + j * 3 + 0] = r;
+            img.rgb[i * row_padded(img.width) + j * 3 + 1] = g;
+            img.rgb[i * row_padded(img.width) + j * 3 + 2] = b;
+        }
+    }
     free(data);
+    fclose(file);
     return img;
 }
 
-void save_bmp(const char *filename, const struct Image24 *img)
+static void save_bmp(const char *filename, const struct BMPImage24 *img)
 {
     FILE *file = fopen(filename, "wb");
 
@@ -102,10 +126,10 @@ void save_bmp(const char *filename, const struct Image24 *img)
     unsigned char *row = (unsigned char *)malloc(row_padded);
     for (int i = 0; i < height; i++)
     {
-        memcpy(row, &img->data[i * row_padded], row_padded);
+        memcpy(row, &img->rgb[i * row_padded], row_padded);
         fwrite(row, row_padded, 1, file);
 
-        unsigned char *src_row = (unsigned char *)&img->data[i * row_padded];
+        unsigned char *src_row = (unsigned char *)&img->rgb[i * row_padded];
         memset(row, 0, row_padded);
         for (int j = 0; j < width; j++)
         {
@@ -121,9 +145,49 @@ void save_bmp(const char *filename, const struct Image24 *img)
     fclose(file);
 }
 
-void free_image(struct Image24 *img)
+static void free_image(struct BMPImage24 *img)
 {
-    img->data.clear();
+    img->rgb.clear();
     img->width = 0;
     img->height = 0;
+    img->pre_height = 0;
 }
+
+// tone_mapping.cpp
+static void tone_mapping(struct BMPImage24 *img, int use_sense);
+
+static int parse_mode(int argc, char **argv)
+{
+    int mode = 0; // default sense reversing barrier
+    if (argc >= 4)
+    {
+        if (strcmp(argv[3], "sense") == 0)
+        {
+            mode = 0;
+        }
+        else if (strcmp(argv[3], "diy") == 1)
+        {
+            mode = 1;
+        }
+    }
+    return mode;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc < 3)
+    {
+        printf("Usage: %s <input.bmp> <output.bmp> [mode]\n", argv[0]);
+    }
+
+    int use_sense = parse_mode(argc, argv);
+
+    BMPImage24 img = load_bmp(argv[1]);
+    tone_mapping(&img, use_sense);
+    save_bmp(argv[2], &img);
+    free_image(&img);
+    return 0;
+}
+
+#include "reversing_barrier.cpp"
+#include "tone_mapping.cpp"
