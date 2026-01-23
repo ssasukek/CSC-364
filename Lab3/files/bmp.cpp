@@ -52,6 +52,10 @@ static int row_padded(int width)
 static BMPImage24 load_bmp(const char *filename)
 {
     FILE *file = fopen(filename, "rb");
+    if(!file){
+        printf("Error opening file: %s\n", filename);
+        exit(EXIT_FAILURE);
+    }
 
     BMPFileHeader fh;
     BMPInfoHeader ih;
