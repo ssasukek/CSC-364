@@ -74,7 +74,7 @@ int adjust(int x, int c)
 
 int main(int argc, char **argv)
 {
-    if (argc != 4)
+    if (argc != 5)
     {
         printf("Usage: %s <server_ip> <port> <contrast> [id]\n", argv[0]);
         return 1;

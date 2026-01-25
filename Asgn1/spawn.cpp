@@ -245,8 +245,8 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < num_workers; i++)
     {
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "\"%s\" %s %d %d", worker_path, server_ip, port, contrast);
+        char cmd[1024];
+        snprintf(cmd, sizeof(cmd), "\"%s\" %s %d %d %d", worker_path, server_ip, port, contrast, i);
         // printf("Spawning: %s\n", cmd);
 
         // Start the child process.
@@ -313,6 +313,16 @@ int main(int argc, char **argv)
             printf("Failed sending rows to worker %d\n", i);
             return 1;
         }
+    }
+    for (int i = 0; i < num_workers; i++)
+    {
+        const int rows = base + (i < rem ? 1 : 0);
+        const int start_row = i * base + (i < rem ? i : rem);
+
+        SOCKET s = worker_sockets[(size_t)i];
+
+        const int img_bytes = rows * padding;
+        const uint8_t *src = img.bgr.data() + (size_t)start_row * (size_t)padding;
 
         uint8_t *dst = img.bgr.data() + (size_t)start_row * (size_t)padding;
         if (img_bytes > 0 && recv_all(s, (char *)dst, img_bytes) <= 0)
