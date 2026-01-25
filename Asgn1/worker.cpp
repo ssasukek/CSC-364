@@ -77,45 +77,95 @@ int adjust(int x, int c)
 
 int main(int argc, char **argv)
 {
-    if (argc != 3)
+    if (argc < 4)
     {
-        printf("Usage: %s <server_ip> <server_port>\n", argv[0]);
+        printf("Usage: %s <server_ip> <port> <contrast> [id]\n", argv[0]);
         return 1;
     }
 
     const char *server_ip = argv[1];
     int port = atoi(argv[2]);
+    int contrast = atoi(argv[3]);
+    int id = (argc >= 5) ? atoi(argv[4]) : -1;
 
     // Server setup
     WSADATA w;
-    WSAStartup(MAKEWORD(2, 2), &w);
+    if (WSAStartup(MAKEWORD(2, 2), &w)){
+        printf("WSAstartup failed");
+        return 1;
+    }
 
-    SOCKET ls = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    SOCKET s= socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s== INVALID_SOCKET){
+        printf("Socket failed");
+        WSACleanup();
+        return 1;
+    }
+    
     struct sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
 
-    bind(ls, (struct sockaddr *)&addr, sizeof(addr));
-    listen(ls, 5);
-    printf("Listening on port %d\n", port);
 
-    int32_t rows = 0, width = 0, contrast = 0, row_padded = 0;
-    int bytes = rows * row_padded;
-    vector<uint8_t> bgr((size_t)bytes);
+    int32_t rows = 0;
+    int32_t width = 0;
 
-    int pixel_bytes = width * 3;
+    if (inet_pton(AF_INET, server_ip, &addr.sin_addr) != 1)
+    {
+        printf("id=%d bad IPv4: %s\n", id, server_ip);
+        closesocket(s);
+        WSACleanup();
+        return 1;
+    }
+
+    if (connect(s, (sockaddr *)&addr, sizeof(addr)) != 0)
+    {
+        printf("id=%d connect failed\n", id);
+        closesocket(s);
+        WSACleanup();
+        return 1;
+    }
+
+    if (!recv_data(s, rows) || !recv_data(s, width))
+    {
+        printf("id=%d recv header failed\n", id);
+        closesocket(s);
+        WSACleanup();
+        return 1;
+    }
+    
+    int padded = row_padded((int)width);
+    int bytes = (int)rows * padded;
+    std::vector<uint8_t> bgr((size_t)bytes);
+
+    if (bytes > 0 && recv_all(s, (char *)bgr.data(), bytes) <= 0)
+    {
+        printf("id=%d recv chunk failed\n", id);
+        closesocket(s);
+        WSACleanup();
+        return 1;
+    }
+
+    int pixel_bytes = (int)width * 3;
     for (int r = 0; r < rows; r++)
     {
-        uint8_t *row_pt = bgr.data() + (size_t)r * (size_t)row_padded;
-
+        uint8_t *rowp = bgr.data() + (size_t)r * (size_t)padded;
         for (int j = 0; j < pixel_bytes; j++)
         {
-            row_pt[j] = (uint8_t)adjust((int)row_pt[j], contrast);
+            rowp[j] = (uint8_t)adjust((int)rowp[j], contrast);
         }
     }
 
-    closesocket(ls);
+    if (bytes > 0 && send_all(s, (const char *)bgr.data(), bytes) <= 0)
+    {
+        printf("id=%d send result failed\n", id);
+        closesocket(s);
+        WSACleanup();
+        return 1;
+    }
+
+    closesocket(s);
     WSACleanup();
     return 0;
 }

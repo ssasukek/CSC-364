@@ -71,14 +71,18 @@ static int recv_all(SOCKET s, char *buf, int len)
 }
 
 // send data with 4-byte length
-static bool send_data(SOCKET s, int32_t &in_msg)
+static bool send_data(SOCKET s, int32_t v)
 {
-    uint32_t net_len = 0;
-    if (send_all(s, (char *)&net_len, sizeof(net_len)) > 0)
-    {
+    uint32_t net = htonl((uint32_t)v);
+    return (send_all(s, (const char *)&net, (int)sizeof(net)) > 0);
+}
+
+static bool recv_data(SOCKET s, int32_t &out_msg)
+{
+    uint32_t net = 0;
+    if (recv_all(s, (char *)&net, (int)sizeof(net)) <= 0)
         return false;
-    }
-    in_msg = (int32_t)ntohl(net_len);
+    out_msg = (int32_t)ntohl(net);
     return true;
 }
 
@@ -114,6 +118,12 @@ static BMPImage24 load_bmp(const char *filename)
     if (fread(&fh, sizeof(fh), 1, file) != 1 || fread(&ih, sizeof(ih), 1, file) != 1)
     {
         printf("Failed reading BMP header\n");
+        fclose(file);
+        exit(EXIT_FAILURE);
+    }
+    if (fh.bfType != 0x4D42 || ih.biBitCount != 24 || ih.biCompression != 0)
+    {
+        printf("not a 24 bit BMP\n");
         fclose(file);
         exit(EXIT_FAILURE);
     }
@@ -172,7 +182,7 @@ static void save_bmp(const char *filename, const BMPImage24 *img)
     memset(&ih, 0, sizeof(ih));
     ih.biSize = sizeof(BMPInfoHeader);
     ih.biWidth = width;
-    ih.biHeight = height;
+    ih.biHeight = img->pre_height;
     ih.biPlanes = 1;
     ih.biBitCount = 24;
     ih.biCompression = 0;
@@ -203,13 +213,10 @@ int main(int argc, char **argv)
 
     const char *server_ip = IP;
     int port = PORT;
-    int contrast = 50; // constrast value - change as needed\
+    int contrast = -50; // constrast value - change as needed
 
     BMPImage24 img = load_bmp(input_bmp);
-    BMPImage24 out = img;
-    out.bgr.assign(img.bgr.size(), 0);
-    
-    int padding = row_padded(img.width);
+    const int padding = row_padded(img.width);
 
     // Server setup
     WSADATA w;
@@ -223,7 +230,7 @@ int main(int argc, char **argv)
     addr.sin_port = htons(port);
 
     bind(ls, (struct sockaddr *)&addr, sizeof(addr));
-    listen(ls, 5);
+    listen(ls, num_workers);
     printf("Listening on port %d\n", port);
 
     // spawn worker processes
@@ -233,10 +240,11 @@ int main(int argc, char **argv)
     si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
 
-    char cmd[512];
     for (int i = 0; i < num_workers; i++)
     {
+        char cmd[512];
         snprintf(cmd, sizeof(cmd), "\"%s\" %s %d %d", worker_path, server_ip, port, contrast);
+        // printf("Spawning: %s\n", cmd);
 
         // Start the child process.
         if (!CreateProcess(
@@ -253,14 +261,12 @@ int main(int argc, char **argv)
         )
         {
             printf("CreateProcess failed (%d).\n", GetLastError());
-            return;
+            closesocket(ls);
+            WSACleanup();
+            return 1;
         }
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
-
-        closesocket(ls);
-        WSACleanup();
-        return 1;
     }
 
     vector<SOCKET> worker_sockets;
@@ -268,17 +274,57 @@ int main(int argc, char **argv)
 
     for (int i = 0; i < num_workers; i++)
     {
-        printf("Waiting for worker %d to connect...\n", i);
+        // printf("Waiting for worker %d to connect...\n", i);
         SOCKET s = accept(ls, NULL, NULL);
         if (s == INVALID_SOCKET)
         {
             printf("Accept failed\n");
             continue;
         }
-        printf("Worker %d connected\n", i);
+        // printf("Worker %d connected\n", i);
         worker_sockets.push_back(s);
     }
 
-    
+    const int H = img.height;
+    const int base = H / num_workers;
+    const int rem = H % num_workers;
 
+    for (int i = 0; i < num_workers; i++)
+    {
+        const int rows = base + (i < rem ? 1 : 0);
+        const int start_row = i * base + (i < rem ? i : rem);
+
+        SOCKET s = worker_sockets[(size_t)i];
+
+        // Send: number of rows, pixels per row
+        if (!send_data(s, rows) || !send_data(s, img.width))
+        {
+            printf("Failed sending header to worker %d\n", i);
+            return 1;
+        }
+
+        const int img_bytes = rows * padding;
+        const uint8_t *src = img.bgr.data() + (size_t)start_row * (size_t)padding;
+
+        if (img_bytes > 0 && send_all(s, (const char *)src, img_bytes) <= 0)
+        {
+            printf("Failed sending rows to worker %d\n", i);
+            return 1;
+        }
+
+        uint8_t *dst = img.bgr.data() + (size_t)start_row * (size_t)padding;
+        if (img_bytes > 0 && recv_all(s, (char *)dst, img_bytes) <= 0)
+        {
+            printf("Failed receiving result from worker %d\n", i);
+            return 1;
+        }
+    }
+
+    save_bmp(output_bmp, &img);
+    printf("output: %s\n", output_bmp);
+
+    for (SOCKET s : worker_sockets)
+    closesocket(s);
+    WSACleanup();
+    return 0;
 }
