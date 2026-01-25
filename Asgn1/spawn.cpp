@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <atomic>
 using namespace std;
 
 #pragma comment(lib, "Ws2_32.lib")
@@ -80,8 +81,7 @@ static bool send_data(SOCKET s, int32_t v)
 static bool recv_data(SOCKET s, int32_t &out_msg)
 {
     uint32_t net = 0;
-    if (recv_all(s, (char *)&net, (int)sizeof(net)) <= 0)
-        return false;
+    if (recv_all(s, (char *)&net, (int)sizeof(net)) <= 0) return false;
     out_msg = (int32_t)ntohl(net);
     return true;
 }
@@ -233,12 +233,15 @@ int main(int argc, char **argv)
     listen(ls, num_workers);
     printf("Listening on port %d\n", port);
 
-    // spawn worker processes
+    // spawn worker processes +  worker connection
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
+
+    vector<SOCKET> worker_sockets;
+    worker_sockets.reserve((size_t)num_workers);
 
     for (int i = 0; i < num_workers; i++)
     {
@@ -267,27 +270,24 @@ int main(int argc, char **argv)
         }
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
-    }
 
-    vector<SOCKET> worker_sockets;
-    worker_sockets.reserve((size_t)num_workers);
-
-    for (int i = 0; i < num_workers; i++)
-    {
         // printf("Waiting for worker %d to connect...\n", i);
         SOCKET s = accept(ls, NULL, NULL);
         if (s == INVALID_SOCKET)
         {
             printf("Accept failed\n");
-            continue;
+            closesocket(ls);
+            WSACleanup();
+            return 1;
         }
         // printf("Worker %d connected\n", i);
         worker_sockets.push_back(s);
     }
 
-    const int H = img.height;
-    const int base = H / num_workers;
-    const int rem = H % num_workers;
+    // sending worker - distribution
+    const int height = img.height;
+    const int base = height / num_workers;
+    const int rem = height % num_workers;
 
     for (int i = 0; i < num_workers; i++)
     {
@@ -295,6 +295,8 @@ int main(int argc, char **argv)
         const int start_row = i * base + (i < rem ? i : rem);
 
         SOCKET s = worker_sockets[(size_t)i];
+
+        printf("Worker %d gets rows %d to %d)\n", i, start_row, start_row + rows);
 
         // Send: number of rows, pixels per row
         if (!send_data(s, rows) || !send_data(s, img.width))

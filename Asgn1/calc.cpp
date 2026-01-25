@@ -50,10 +50,7 @@ static int recv_all(SOCKET s, char *buf, int len)
 static bool recv_data(SOCKET s, int32_t &out_msg)
 {
     uint32_t net_len = 0;
-    if (recv_all(s, (char *)&net_len, sizeof(net_len)) <= 0)
-    {
-        return false;
-    }
+    if (recv_all(s, (char *)&net_len, sizeof(net_len)) <= 0) return false;
     out_msg = (int32_t)ntohl(net_len);
     return true;
 }
@@ -77,7 +74,7 @@ int adjust(int x, int c)
 
 int main(int argc, char **argv)
 {
-    if (argc < 4)
+    if (argc != 4)
     {
         printf("Usage: %s <server_ip> <port> <contrast> [id]\n", argv[0]);
         return 1;
@@ -86,7 +83,7 @@ int main(int argc, char **argv)
     const char *server_ip = argv[1];
     int port = atoi(argv[2]);
     int contrast = atoi(argv[3]);
-    int id = (argc >= 5) ? atoi(argv[4]) : -1;
+    int id = atoi(argv[4]);
 
     // Server setup
     WSADATA w;
@@ -106,7 +103,6 @@ int main(int argc, char **argv)
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
-
 
     int32_t rows = 0;
     int32_t width = 0;
@@ -148,12 +144,12 @@ int main(int argc, char **argv)
     }
 
     int pixel_bytes = (int)width * 3;
-    for (int r = 0; r < rows; r++)
+    for (int i = 0; i < rows; i++)
     {
-        uint8_t *rowp = bgr.data() + (size_t)r * (size_t)padded;
+        uint8_t *row = bgr.data() + (size_t)i * (size_t)padded;
         for (int j = 0; j < pixel_bytes; j++)
         {
-            rowp[j] = (uint8_t)adjust((int)rowp[j], contrast);
+            row[j] = (uint8_t)adjust((int)row[j], contrast);
         }
     }
 
