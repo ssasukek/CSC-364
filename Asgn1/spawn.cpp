@@ -122,7 +122,7 @@ static BMPImage24 load_bmp(const char *filename)
 
     BMPImage24 img;
     img.width = ih.biWidth;
-    img.height = (ih.biHeight > 0) ? ih.biHeight : -ih.biHeight; // handle top-down BMP
+    img.height = (ih.biHeight > 0) ? ih.biHeight : -ih.biHeight;
     img.pre_height = ih.biHeight;
 
     int padding = row_padded(img.width);
@@ -290,7 +290,6 @@ int main(int argc, char **argv)
 
         printf("Worker %d gets rows %d to %d)\n", i, start_row, start_row + rows);
 
-        // Send: number of rows, pixels per row
         if (!send_data(s, rows) || !send_data(s, img.width))
         {
             printf("Failed sending header to worker %d\n", i);
@@ -305,16 +304,6 @@ int main(int argc, char **argv)
             printf("Failed sending rows to worker %d\n", i);
             return 1;
         }
-    }
-    for (int i = 0; i < num_workers; i++)
-    {
-        const int rows = base + (i < rem ? 1 : 0);
-        const int start_row = i * base + (i < rem ? i : rem);
-
-        SOCKET s = worker_sockets[(size_t)i];
-
-        const int img_bytes = rows * padding;
-        const uint8_t *src = img.bgr.data() + (size_t)start_row * (size_t)padding;
 
         uint8_t *dst = img.bgr.data() + (size_t)start_row * (size_t)padding;
         if (img_bytes > 0 && recv_all(s, (char *)dst, img_bytes) <= 0)
