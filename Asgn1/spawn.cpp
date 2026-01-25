@@ -78,14 +78,6 @@ static bool send_data(SOCKET s, int32_t v)
     return (send_all(s, (const char *)&net, (int)sizeof(net)) > 0);
 }
 
-static bool recv_data(SOCKET s, int32_t &out_msg)
-{
-    uint32_t net = 0;
-    if (recv_all(s, (char *)&net, (int)sizeof(net)) <= 0) return false;
-    out_msg = (int32_t)ntohl(net);
-    return true;
-}
-
 static int row_padded(int width)
 {
     return (width * 3 + 3) & (~3);
