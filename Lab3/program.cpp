@@ -1,4 +1,4 @@
-// due jan 23, 2024
+// due jan 23, 2026
 // 4 threqads + two stage tone mapping + barrier + gather fucntion
 // /program <input.bmp> <output.bmp>
 
