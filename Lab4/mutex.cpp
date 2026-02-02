@@ -188,16 +188,16 @@ void pworker(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lock_t *m)
         (*shared_row)++;
         unlock(m);
 
-        /* guassian horizontal blur : 
-        p[i] = p[i] * 0.22508352
-        + p[i +1] *(0.11098164) + p[i +2] *(0.01330373) + p[i +3] *(0.00038771)
-        + p[i -1] *(0.11098164) + p[i -2] *(0.01330373) + p[i -3] *(0.00038771);
+        /* guassian horizontal blur :
+        p[i] = p[i] * 0.399050
+        + p[i +1] *(0.242036) + p[i +2] *(0.054005) + p[i +3] *(0.004433)
+        + p[i -1] *(0.242036) + p[i -2] *(0.054005) + p[i -3] *(0.004433);
         */
         // const double weights[] = {
-        //     0.22508352,
-        //     0.11098164,
-        //     0.01330373,
-        //     0.00038771
+        //     0.399050,
+        //     0.242036,
+        //     0.054005,
+        //     0.004433
         // };
 
         for (int x = 0; x < width; x++){
