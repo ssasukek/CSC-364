@@ -13,6 +13,7 @@
 #include <stdatomic.h>
 #include <thread>
 #include <math.h>
+#include <mpi.h> //mpiexec
 
 #pragma pack(push, 1)
 struct BMPFileHeader
@@ -175,7 +176,11 @@ void gather()
 {
 }
 
-void pworker(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lock_t *m)
+void vertical_blur(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lock_t *m){
+
+}
+
+void horizontal_blur(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lock_t *m)
 {
     int width = src->width;
     int height = src->height;
@@ -231,16 +236,23 @@ void pworker(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lock_t *m)
             dst->bgr[out_res + 1] = g / weight_count;
             dst->bgr[out_res + 2] = r / weight_count;
         }
-
         /* guassian vertical blur */
     }
 }
 
 int main(int argc, char **argv)
 {
+    // class code: MPI
+    MPI_Init(&argc, &argv);
+
+    int rank, nprocs;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank); // rank == id
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs); // total worker
+
     if (argc < 3)
     {
         printf("Usage: %s <input.bmp> <output.bmp>\n", argv[0]);
+        MPI_Finalize();
         return 1;
     }
 
@@ -250,25 +262,62 @@ int main(int argc, char **argv)
     BMPImage24 img = load_bmp(input_bmp);
     BMPImage24 out_img = img;
 
-    int shared_row = 0;
-    lock_t m;
-    init(&m);
+    const int N = 10000;
+    int *arr = 0;
 
-    // creating worker threads
-    // emplace_back appends new element to the end of container
-    std::vector<std::thread> workers;
-    int num_workers = 4;
-    for (int i = 0; i < num_workers; i++)
+    int base = N / nprocs, rem = N % nprocs;
+    int nloc = base + (rank < rem);
+
+    int *counts = 0, *displs = 0;
+    if (rank == 0)
     {
-        workers.emplace_back(pworker, &img, &out_img, &shared_row, &m);
+        arr = (int *)malloc(N * sizeof(int));
+        srand(1);
+        for (int i = 0; i < N; i++)
+            arr[i] = rand() % 1000;
+
+        counts = (int *)malloc(nprocs * sizeof(int));
+        displs = (int *)malloc(nprocs * sizeof(int));
+
+        int off = 0;
+        for (int p = 0; p < nprocs; p++)
+        {
+            counts[p] = base + (p < rem);
+            displs[p] = off;
+            off += counts[p];
+        }
     }
 
-    for (int i = 0; i < num_workers; i++)
-    {
-        workers[i].join();
-    }
+    int *loc = (int *)malloc(nloc * sizeof(int));
 
-    save_bmp(output_bmp, &out_img);
-    printf("output: %s\n", output_bmp);
+    MPI_Scatterv(arr, counts, displs, MPI_INT, loc, nloc, MPI_INT, 0, MPI_COMM_WORLD);
+
+    for (int i = 0; i < nloc; i++)
+        loc[i]++;
+
+    // per-entry arithmetic op
+
+    MPI_Barrier(MPI_COMM_WORLD); // barrier between phases
+
+    long long lsum = 0;
+    for (int i = 0; i < nloc; i++)
+        lsum += loc[i];
+
+    long long gsum = 0;
+    MPI_Reduce(&lsum, &gsum, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if (rank == 0)
+        printf("sum=%lld\n", gsum);
+        save_bmp(output_bmp, &out_img);
+        printf("output: %s\n", output_bmp);
+
+    free(loc);
+    if (rank == 0)
+    {
+        free(arr);
+        free(counts);
+        free(displs);
+    }
+    MPI_Finalize();
     return 0;
 }
