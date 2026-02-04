@@ -148,57 +148,23 @@ static void save_bmp(const char *filename, const BMPImage24 *img)
     fclose(file);
 }
 
-/* class code mutex */
-/* mutex is a synchronization primitive that enforeces limit
-    on access to a shared resource when having multiple thread of execution
-*/
-typedef struct
+/* guassian vertical blur */
+// data[col*3 + y*rwb+coloroffset]
+void vertical_blur(uint8_t *data, int width, int height)
 {
-    std::atomic_flag f;
-} lock_t;
-static void init(lock_t *m)
-{
-    atomic_flag_clear(&m->f); // f=0
-}
-static void lock(lock_t *m) // t1t2
-{
-    while (atomic_flag_test_and_set(&m->f))
+    int rwb_padding = row_padded(width);
+
+    std::vector<uint8_t> ctemp(height * 3);
+    for (int col = 0; col < width; col++)
     {
-        // spin
-    }
-}
-static void unlock(lock_t *m)
-{
-    atomic_flag_clear(&m->f);
-}
-
-void gather()
-{
-}
-
-void vertical_blur(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lock_t *m){
-
-}
-
-void horizontal_blur(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lock_t *m)
-{
-    int width = src->width;
-    int height = src->height;
-    int padding = row_padded(width);
-
-    while (true)
-    {
-        lock(m);
-        int sr = *shared_row;
-        if (sr >= src->height)
+        for (int y = 0; y < height; y++)
         {
-            unlock(m);
-            break;
+            ctemp[y + 0] = data[(col * 3) + (y * rwb_padding) + 0];
+            ctemp[y + 1] = data[(col * 3) + (y * rwb_padding) + 0];
+            ctemp[y + 2] = data[(col * 3) + (y * rwb_padding) + 0];
         }
-        (*shared_row)++;
-        unlock(m);
 
-        /* guassian horizontal blur :
+        /* guassian blur :
         p[i] = p[i] * 0.399050
         + p[i +1] *(0.242036) + p[i +2] *(0.054005) + p[i +3] *(0.004433)
         + p[i -1] *(0.242036) + p[i -2] *(0.054005) + p[i -3] *(0.004433);
@@ -209,6 +175,58 @@ void horizontal_blur(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lo
             0.054005,
             0.004433
         };
+
+        for (int y = 0; y < height; y++)
+        {
+            double b = 0.0, g = 0.0, r = 0.0;
+            double weight_count = 0.0;
+
+            // offset
+            for (int c = -3; c <= 3; c++)
+            {
+                int neigh_y = y + c;
+
+                // check for corner/bound
+                if (neigh_y >= 0 && neigh_y < height)
+                {
+                    double weight_value = weights[abs(c)];
+                    int in = (neigh_y * 3);
+                    b += ctemp[in + 0] * weight_value;
+                    g += ctemp[in + 1] * weight_value;
+                    r += ctemp[in + 2] * weight_value;
+                    weight_count += weight_value;
+                }
+            }
+            int out = (y * rwb_padding) + (col * 3);
+            data[out + 0] = b / weight_count;
+            data[out + 1] = g / weight_count;
+            data[out + 2] = r / weight_count;
+        }
+    }
+}
+
+/* guassian horizontal blur */
+void horizontal_blur(uint8_t *data, int rnum, int width)
+{
+    int padding = row_padded(width);
+
+    std::vector<uint8_t> rtemp(padding);
+
+    /* guassian blur :
+    p[i] = p[i] * 0.399050
+    + p[i +1] *(0.242036) + p[i +2] *(0.054005) + p[i +3] *(0.004433)
+    + p[i -1] *(0.242036) + p[i -2] *(0.054005) + p[i -3] *(0.004433);
+    */
+    const double weights[] = {
+        0.399050,
+        0.242036,
+        0.054005,
+        0.004433
+    };
+
+    for (int sr = 0; sr < rnum; sr++)
+    {
+        memcpy(rtemp.data(), &data[sr * padding], padding);
 
         for (int x = 0; x < width; x++)
         {
@@ -223,21 +241,25 @@ void horizontal_blur(const BMPImage24 *src, BMPImage24 *dst, int *shared_row, lo
                 // check for corner/bound
                 if (neigh_x >= 0 && neigh_x < width)
                 {
-                    int pixel_idx = (sr * padding) + (neigh_x * 3);
                     double weight_value = weights[abs(c)];
-                    b += src->bgr[pixel_idx + 0] * weight_value;
-                    g += src->bgr[pixel_idx + 1] * weight_value;
-                    r += src->bgr[pixel_idx + 2] * weight_value;
+                    int in = (sr * padding) + (neigh_x * 3);
+                    b += rtemp[in + 0] * weight_value;
+                    g += rtemp[in + 1] * weight_value;
+                    r += rtemp[in + 2] * weight_value;
                     weight_count += weight_value;
                 }
             }
-            int out_res = (sr * padding) + (x * 3);
-            dst->bgr[out_res + 0] = b / weight_count;
-            dst->bgr[out_res + 1] = g / weight_count;
-            dst->bgr[out_res + 2] = r / weight_count;
+            int out = (sr * padding) + (x * 3);
+            data[out + 0] = b / weight_count;
+            data[out + 1] = g / weight_count;
+            data[out + 2] = r / weight_count;
         }
-        /* guassian vertical blur */
     }
+}
+
+void gather(void *send_buf, void *recv_buf)
+{
+
 }
 
 int main(int argc, char **argv)
@@ -246,18 +268,20 @@ int main(int argc, char **argv)
     MPI_Init(&argc, &argv);
 
     int rank, nprocs;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank); // rank == id
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);   // rank == id
     MPI_Comm_size(MPI_COMM_WORLD, &nprocs); // total worker
 
-    if (argc < 3)
+    if (argc < 4)
     {
-        printf("Usage: %s <input.bmp> <output.bmp>\n", argv[0]);
+        printf("Usage: %s <n> <c> <input.bmp> <output.bmp>\n", argv[0]);
         MPI_Finalize();
         return 1;
     }
 
-    const char *input_bmp = argv[1];
-    const char *output_bmp = argv[2];
+    int n = atoi(argv[1]);
+    int c = atoi(argv[2]);
+    const char *input_bmp = argv[3];
+    const char *output_bmp = argv[4];
 
     BMPImage24 img = load_bmp(input_bmp);
     BMPImage24 out_img = img;
@@ -265,7 +289,8 @@ int main(int argc, char **argv)
     const int N = 10000;
     int *arr = 0;
 
-    int base = N / nprocs, rem = N % nprocs;
+    int base = N / nprocs;
+    int rem = N % nprocs;
     int nloc = base + (rank < rem);
 
     int *counts = 0, *displs = 0;
@@ -288,6 +313,8 @@ int main(int argc, char **argv)
         }
     }
 
+    double start = MPI_Wtime();
+
     int *loc = (int *)malloc(nloc * sizeof(int));
 
     MPI_Scatterv(arr, counts, displs, MPI_INT, loc, nloc, MPI_INT, 0, MPI_COMM_WORLD);
@@ -302,12 +329,18 @@ int main(int argc, char **argv)
     long long lsum = 0;
     for (int i = 0; i < nloc; i++)
         lsum += loc[i];
+        horizontal_blur();
+        gather();
+        vertical_blur();
 
     long long gsum = 0;
     MPI_Reduce(&lsum, &gsum, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
+    double end = MPI_Wtime();
+
     if (rank == 0)
         printf("sum=%lld\n", gsum);
+        printf("Time: %.4f sec\n", end - start);
         save_bmp(output_bmp, &out_img);
         printf("output: %s\n", output_bmp);
 
