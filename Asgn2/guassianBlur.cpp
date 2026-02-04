@@ -389,14 +389,12 @@ int main(int argc, char **argv)
         save_bmp(output_bmp, &img);
         printf("output: %s\n", output_bmp);
     }
-
     free(loc);
     if (rank == 0)
     {
         free(counts);
         free(displs);
     }
-
     MPI_Finalize();
     return 0;
 }
