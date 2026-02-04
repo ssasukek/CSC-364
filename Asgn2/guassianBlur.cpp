@@ -1,6 +1,7 @@
 // due feb 7 2026
 // guassian blur
 // ./GaussianBlur [n] [c] [bmp]
+// https://www.mpich.org/static/docs/v3.3/www3/
 
 #define WIN32_LEAN_AND_MEAN
 #include <stdio.h>
@@ -257,9 +258,10 @@ void horizontal_blur(uint8_t *data, int rnum, int width)
     }
 }
 
-void gather(void *send_buf, void *recv_buf)
+//mpi_gatherv - gather from all process in a group
+void gather(void *send_buf, int send_count, void *recv_buf, int *recv_count, int *displs)
 {
-
+    MPI_Gatherv(send_buf, send_count, MPI_UNSIGNED_CHAR, recv_buf, recv_count, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 }
 
 int main(int argc, char **argv)
@@ -286,21 +288,16 @@ int main(int argc, char **argv)
     BMPImage24 img = load_bmp(input_bmp);
     BMPImage24 out_img = img;
 
-    const int N = 10000;
-    int *arr = 0;
-
+    const int N = img.height;
     int base = N / nprocs;
     int rem = N % nprocs;
     int nloc = base + (rank < rem);
 
     int *counts = 0, *displs = 0;
+    int padding = row_padded(img.width);
+
     if (rank == 0)
     {
-        arr = (int *)malloc(N * sizeof(int));
-        srand(1);
-        for (int i = 0; i < N; i++)
-            arr[i] = rand() % 1000;
-
         counts = (int *)malloc(nprocs * sizeof(int));
         displs = (int *)malloc(nprocs * sizeof(int));
 
@@ -315,31 +312,18 @@ int main(int argc, char **argv)
 
     double start = MPI_Wtime();
 
-    int *loc = (int *)malloc(nloc * sizeof(int));
+    uint8_t *loc = (uint8_t *)malloc(nloc * padding);
 
-    MPI_Scatterv(arr, counts, displs, MPI_INT, loc, nloc, MPI_INT, 0, MPI_COMM_WORLD);
-
-    for (int i = 0; i < nloc; i++)
-        loc[i]++;
-
-    // per-entry arithmetic op
-
-    MPI_Barrier(MPI_COMM_WORLD); // barrier between phases
-
-    long long lsum = 0;
-    for (int i = 0; i < nloc; i++)
-        lsum += loc[i];
-        horizontal_blur();
-        gather();
-        vertical_blur();
-
-    long long gsum = 0;
-    MPI_Reduce(&lsum, &gsum, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-
+    for (int i = 0; i < n; i++){
+        MPI_Scatterv(img.bgr.data(), counts, displs, MPI_UNSIGNED_CHAR, loc, nloc, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
+        horizontal_blur(loc, nloc, img.width);
+        gather(loc, (nloc * padding), img.bgr.data(), counts, displs);
+        vertical_blur(img.bgr.data(), img.width, img.height);
+    }
+    
     double end = MPI_Wtime();
 
     if (rank == 0)
-        printf("sum=%lld\n", gsum);
         printf("Time: %.4f sec\n", end - start);
         save_bmp(output_bmp, &out_img);
         printf("output: %s\n", output_bmp);
@@ -347,7 +331,6 @@ int main(int argc, char **argv)
     free(loc);
     if (rank == 0)
     {
-        free(arr);
         free(counts);
         free(displs);
     }
