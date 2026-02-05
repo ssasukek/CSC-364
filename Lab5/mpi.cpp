@@ -158,7 +158,7 @@ int main(int argc, char **argv)
 
     if (argc < 3)
     {
-        printf("Usage: %s <input.bmp> <output.bmp>\n", argv[0]);
+        printf("Usage: mpi exec -n <n> ./mpi.exe worker <input.bmp> <output.bmp>\n", argv[0]);
         MPI_Finalize();
         return 1;
     }
@@ -168,6 +168,9 @@ int main(int argc, char **argv)
 
     BMPImage24 img = load_bmp(input_bmp);
     int padding = row_padded(img.width);
+
+    MPI_Bcast(&img.width, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&img.height, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     const int N = img.height;
     int base = N / nprocs, rem = N % nprocs;
@@ -194,7 +197,7 @@ int main(int argc, char **argv)
     }
 
     // allocate mem for loc chunk
-    unsigned char *loc = (unsigned char *)malloc(nloc * sizeof(unsigned char));
+    unsigned char *loc = (unsigned char *)malloc(nloc * padding);
 
     MPI_Scatterv(img.bgr.data(), counts, displs, MPI_UNSIGNED_CHAR, loc, nloc * padding, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
@@ -227,6 +230,8 @@ int main(int argc, char **argv)
         avg = avg / 128.0; 
     }
 
+    MPI_Bcast(&avg, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
     // dot product
     // (B,G,R) *= (0.9 * avg,0.8*avg, 1.0*avg)
     for (int i = 0; i < nloc; i++){
@@ -239,8 +244,14 @@ int main(int argc, char **argv)
             b *= (0.9 * avg);
             g *= (0.8 * avg);
             r *= (1.0 * avg);
+
+            loc[index + 0] = (unsigned char)b;
+            loc[index + 1] = (unsigned char)g;
+            loc[index + 2] = (unsigned char)r;
         }
     }
+
+    MPI_Gatherv(loc, nloc * padding, MPI_UNSIGNED_CHAR, img.bgr.data(), counts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
     if (rank == 0)
         printf("sum=%lld\n", gsum);
