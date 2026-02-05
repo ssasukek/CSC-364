@@ -184,7 +184,7 @@ int main(int argc, char **argv)
         counts = (int *)malloc(nprocs * sizeof(int));
         displs = (int *)malloc(nprocs * sizeof(int));
 
-               int off = 0;
+        int off = 0;
         for (int p = 0; p < nprocs; p++)
         {
             counts[p] = (base + (p < rem)) * padding;
@@ -193,9 +193,10 @@ int main(int argc, char **argv)
         }
     }
 
-    int *loc = (int *)malloc(nloc * sizeof(int));
+    // allocate mem for loc chunk
+    unsigned char *loc = (unsigned char *)malloc(nloc * sizeof(unsigned char));
 
-    MPI_Scatterv(img.bgr.data(), counts, displs, MPI_INT, loc, nloc, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatterv(img.bgr.data(), counts, displs, MPI_UNSIGNED_CHAR, loc, nloc * padding, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
     // for (int i = 0; i < nloc; i++)
     //     loc[i]++;
@@ -247,7 +248,7 @@ int main(int argc, char **argv)
     free(loc);
     if (rank == 0)
     {
-        // free(arr);
+        save_bmp(output_bmp, &img);
         free(counts);
         free(displs);
     }
