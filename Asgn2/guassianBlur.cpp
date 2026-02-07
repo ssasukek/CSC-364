@@ -303,7 +303,7 @@ int main(int argc, char **argv)
 
     if (argc < 4)
     {
-        printf("Usage: %s <n> <c> <input.bmp> <output.bmp>\n", argv[0]);
+        printf("Usage: mpiexec -n <c> %s <n> <c> <input.bmp> <output.bmp>\n", argv[0]);
         MPI_Finalize();
         return 1;
     }
