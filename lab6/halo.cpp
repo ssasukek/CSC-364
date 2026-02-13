@@ -235,15 +235,15 @@ int main(int argc, char **argv)
     }
 
     // checksum
-    long long gsum = 0;
+    long long lsum = 0;
     for (int i = 0; i < nloc; i++){
         for (int j = 0; j <img.width * 3; j++){
-            gsum += loc_new[i * padding + j];
+            lsum += loc_new[i * padding + j];
         }
     }
 
-    long long lsum = 0;
-    MPI_Reduce(&gsum, &lsum, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    long long gsum = 0;
+    MPI_Reduce(&lsum, &gsum, 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
 
     MPI_Gatherv(loc_new, nloc * padding, MPI_UNSIGNED_CHAR, img.bgr.data(), counts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
