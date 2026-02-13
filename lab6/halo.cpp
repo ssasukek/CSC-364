@@ -197,7 +197,8 @@ int main(int argc, char **argv)
 
     MPI_Scatterv(img.bgr.data(), counts, displs, MPI_UNSIGNED_CHAR, loc_old + padding, nloc * padding, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
-    if (rank == 0) printf("rank 0 sending %d to rank 1\n", loc_old[nloc * padding + (img.width / 2) * 3]);
+    // if (rank == 0) printf("rank 0 sending %d to rank 1\n", loc_old[nloc * padding + (img.width / 2) * 3]);
+    
     // Halo Exchange
     int top_neigh = rank - 1;
     int bot_neigh = rank + 1;
@@ -210,13 +211,13 @@ int main(int argc, char **argv)
 
     // exchange to bottom ghost row
     MPI_Sendrecv(loc_old + padding, padding, MPI_UNSIGNED_CHAR, top_neigh, 0, loc_old + (nloc + 1) * padding, padding, MPI_UNSIGNED_CHAR, bot_neigh, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    printf("exchange 1 pass\n");
+    // printf("exchange 1 pass\n");
     // exchange to top ghost row
     MPI_Sendrecv(loc_old + (nloc * padding), padding, MPI_UNSIGNED_CHAR, bot_neigh, 1, loc_old, padding, MPI_UNSIGNED_CHAR, top_neigh, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    printf("exchange 2 pass\n");
+    // printf("exchange 2 pass\n");
 
-    if (rank == 1)
-        printf("rank 1 received %d from rank 0\n", loc_old[nloc * padding + (img.width / 2) * 3]);
+    // if (rank == 1)
+    //     printf("rank 1 received %d from rank 0\n", loc_old[nloc * padding + (img.width / 2) * 3]);
 
     // Stencil iteration 1
     for (int y = 1; y <= nloc; y++){
@@ -248,7 +249,7 @@ int main(int argc, char **argv)
     MPI_Gatherv(loc_new, nloc * padding, MPI_UNSIGNED_CHAR, img.bgr.data(), counts, displs, MPI_UNSIGNED_CHAR, 0, MPI_COMM_WORLD);
 
     if (rank == 0)
-        printf("gsum=%lld\n", gsum);
+        printf("gsum (checksum)=%lld\n", gsum);
     free(loc_old);
     free(loc_new);
     if (rank == 0)
